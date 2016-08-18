@@ -1,0 +1,213 @@
+---
+meta:
+  jobs:
+    rdpgmc:
+      persistent_disk_pool: (( param "Specify the persistent disk pool for postgres" ))
+      templates:
+      - name: toolbelt-quick
+        release: toolbelt
+      - name: toolbelt
+        release: toolbelt
+      - name: consul
+        release: rdpg
+      - name: pgbdr
+        release: rdpg
+      - name: pgbouncer
+        release: rdpg
+      - name: rdpgd-manager
+        release: rdpg
+        instances: 1
+      update: {}
+      properties:
+       consul:
+         server: true
+         join_nodes: (( grab jobs.rdpgmc.networks.rdpg.static_ips ))
+
+    services-lb:
+      templates:
+      - name: haproxy
+        release: rdpg
+      - name: global-pgbouncer
+        release: rdpg
+      - name: rdpgd-global-pgbouncer
+        release: rdpg
+      update: {}
+      properties:
+        consul:
+          debug: "false"
+          server: false
+          join_node: (( grab jobs.rdpgmc.networks.rdpg.static_ips.[0] ))
+
+    sc-pgbdr-m0-r0:
+      templates:
+      - name: consul
+        release: rdpg
+      - name: pgbdr
+        release: rdpg
+      - name: pgbouncer
+        release: rdpg
+      - name: haproxy
+        release: rdpg
+      - name: rdpgd-service
+        release: rdpg
+      update: {}
+      properties:
+        consul:
+          debug: "false"
+          server: false
+          join_node: (( grab jobs.rdpgmc.networks.rdpg.static_ips.[0] ))
+
+    sc-pgbdr-m0-r1:
+      templates:
+      - name: consul
+        release: rdpg
+      - name: pgbdr
+        release: rdpg
+      - name: pgbouncer
+        release: rdpg
+      - name: haproxy
+        release: rdpg
+      - name: rdpgd-service
+        release: rdpg
+      update: {}
+      properties:
+       consul:
+          debug: "false"
+          server: false
+          join_node: (( grab jobs.rdpgmc.networks.rdpg.static_ips.[0] ))
+
+    sc-pgbdr-m1-r0:
+      templates:
+      - name: consul
+        release: rdpg
+      - name: postgresql
+        release: rdpg
+      - name: pgbouncer
+        release: rdpg
+      - name: haproxy
+        release: rdpg
+      - name: rdpgd-service
+        release: rdpg
+      update: {}
+      properties:
+       consul:
+          debug: "false"
+          server: false
+          join_node: (( grab jobs.rdpgmc.networks.rdpg.static_ips.[0] ))
+
+    smoke_tests:
+      templates:
+      - name: smoke-tests
+        release: rdpg
+      - name: toolbelt
+        release: toolbelt
+      - name: toolbelt-quick
+        release: toolbelt
+    acceptance_tests:
+      templates:
+      - name: acceptance-tests
+        release: rdpg
+      - name: toolbelt
+        release: toolbelt
+      - name: toolbelt-quick
+        release: toolbelt
+    backup_tests:
+      templates:
+      - name: backup-tests
+        release: rdpg
+      - name: toolbelt
+        release: toolbelt
+      - name: toolbelt-quick
+        release: toolbelt
+    broker_registrar:
+      templates:
+      - name: broker-registrar
+        release: rdpg
+      - name: toolbelt
+        release: toolbelt
+      - name: toolbelt-quick
+        release: toolbelt
+    broker_deregistrar:
+      templates:
+      - name: broker-deregistr
+        release: rdpg
+      - name: toolbelt
+        release: toolbelt
+      - name: toolbelt-quick
+        release: toolbelt
+
+jobs:
+- instances: 1
+  name: services-lb
+  networks: (( param "Define the networks. Eg: { name: rdpg }" ))
+  resource_pool: (( param "Define the resource pool (eg. 'rdpg')" ))
+  update:
+    canaries: 0
+    max_in_flight: 1
+
+- instances: 3
+  name: rdpgmc
+  networks: (( param "Define the networks. Eg: { name: rdpg, static_ips: (( static_ips(0,1,2) )) }" ))
+  resource_pool: (( param "Define the resource pool (eg. 'rdpg')" ))
+  update:
+    serial: true
+    canaries: 0
+    max_in_flight: 1
+
+- instances: 0
+  name: sc-pgbdr-m0-r0
+  networks: (( param "Define the networks. Eg: { name: rdpg, static_ips: (( static_ips(0,1,2) )) }" ))
+  resource_pool: (( param "Define the resource pool (eg. 'rdpg')" ))
+  update:
+    serial: true
+    canaries: 0
+    max_in_flight: 1
+
+- instances: 0
+  name: sc-pgbdr-m0-r1
+  networks: (( param "Define the networks. Eg: { name: rdpg, static_ips: (( static_ips(0,1,2) )) }" ))
+  resource_pool: (( param "Define the resource pool (eg. 'rdpg')" ))
+  update:
+    serial: true
+    canaries: 0
+    max_in_flight: 1
+
+- instances: 1
+  name: sc-pgbdr-m1-r0
+  networks: (( param "Define the networks. Eg: { name: rdpg, static_ips: (( static_ips(0,1,2) )) }" ))
+  resource_pool: (( param "Define the resource pool (eg. 'rdpg')" ))
+  update:
+    serial: true
+    canaries: 0
+    max_in_flight: 1
+
+- instances: 1
+  name: smoke_tests
+  .: (( inject meta.jobs.errand ))
+  networks: (( param "Define the smoke_tests networking" ))
+  resource_pool: (( param "Define the smoke_tests resource pool eg. 'errand_a'" ))
+
+- instances: 1
+  name: acceptance_tests
+  .: (( inject meta.jobs.errand ))
+  networks: (( param "Define the acceptance_tests networking" ))
+  resource_pool: (( param "Define the acceptance_tests resource pool eg. 'errand_a'" ))
+
+- instances: 1
+  name: backup_tests
+  .: (( inject meta.jobs.errand ))
+  networks: (( param "Define the acceptance_tests networking" ))
+  resource_pool: (( param "Define the acceptance_tests resource pool eg. 'errand_a'" ))
+
+- instances: 1
+  name: broker_registrar
+  .: (( inject meta.jobs.errand ))
+  networks: (( param "Define the broker_registrar networking" ))
+  resource_pool: (( param "Define the acceptance_tests resource pool eg. 'errand_a'" ))
+
+- instances: 1
+  name: broker_deregistrar
+  .: (( inject meta.jobs.errand ))
+  networks: (( param "Define the broker_deregistrar networking" ))
+  resource_pool: (( param "Define the acceptance_tests resource pool eg. 'errand_a'" ))
+

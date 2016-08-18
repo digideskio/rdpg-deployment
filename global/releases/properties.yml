@@ -1,0 +1,191 @@
+---
+meta:
+  client_pool:
+    net:  172.31.255.0
+    mask: 255.255.255.0
+  client_routes: (( param "What networks should be advertised to clients over the VPN? (format NET_ADDR MASK)"
+  certs:
+    ca:  (( param "What is the CA cert used to sign the server/client certs?" ))
+    crl: (( param "Provide the current CRL pem listing what certs have been revoked by the CA" ))
+    dh: (( param "What are the DH params for OpenVPN to use (pem format)?"
+    server: (( param "Provide the cert to be used by the OpenVPN server" ))
+    server_key: (( param "Provide the private key used by the OpenVPN server for its certificate" ))
+
+properties:
+  openvpn:
+    port: 443
+    ca_crt:  (( grab meta.certs.ca ))
+    crl_pem: (( grab meta.certs.crl ))
+    dh_pem:  (( grab meta.certs.dh ))
+    server: (( concat meta.client_pool.net " " meta.client_pool.mask ))
+    server_crt: (( grab meta.certs.server ))
+    server_key: (( grab meta.certs.server_key ))
+
+    iptables:
+    - (( concat "POSTROUTING -t nat -s " meta.client_pool.net "/" meta.client_pool.mask " -j MASQUERADE" ))
+    push_routes: (( grab meta.client_routes ))
+
+properties:
+  rdpgmc:
+   consul:
+     server: true
+     join_nodes: (( grab jobs.rdpgmc.networks.rdpg.static_ips )) # TODO: Use Links?
+
+  rdpgd_manager:
+    # In hours
+    local_retention_time: 48.0
+    remote_retention_time: 336.0
+
+  rdpgd_service:
+    #In hours
+    local_retention_time: 48.0
+    remote_retention_time: 336.0
+
+  general:
+    #Please set this value to 'bosh_lite' before submitting to the pipeline.
+    environment_name: bosh_lite
+
+  postgresql:
+    debug: "true"
+    hba_config: (( grab meta.hba_config ))
+    max_connections: "250"
+    shared_buffers: "128MB"
+    effective_cache_size: "256MB"
+    work_mem: "2MB"
+    maintenance_work_mem: "16MB"
+    checkpoint_segments: "16"
+    checkpoint_completion_target: "0.7"
+    wal_buffers: "1MB"
+    default_statistics_target: "100"
+
+  pgbdr:
+    debug: "true"
+    hba_config: (( grab meta.hba_config ))
+    max_connections: "250"
+    shared_buffers: "128MB"
+    effective_cache_size: "256MB"
+    work_mem: "2MB"
+    maintenance_work_mem: "16MB"
+    checkpoint_segments: "16"
+    checkpoint_completion_target: "0.7"
+    wal_buffers: "1MB"
+    default_statistics_target: "100"
+
+  consul:
+    debug: "false"
+    server: false
+    join_node: (( grab jobs.rdpgmc.networks.rdpg.static_ips.[0] ))
+
+  rdpgd_service:
+    debug: "false"
+    log_level: "info"
+    cluster_name: ""
+    pool_size: 10
+    db_pass: "CHANGEME@1ce12345!!!"
+    max_instances_allowed: 12
+    max_instances_limit: 15
+
+  pgbouncer:
+    debug: "true"
+    admin_user: "rdpgpbadmin"
+    admin_pass: "admin"
+  haproxy:
+    admin_user: admin
+    admin_pass: admin
+    admin_port: 9999
+
+  top-level-haproxy:
+    admin_user: admin
+    admin_pass: admin
+    admin_port: 9998
+    mc_nodes: (( grab jobs.rdpgmc.networks.rdpg.static_ips ))
+    global_pgbouncer_nodes: (( grab jobs.global-pgbouncer.networks.rdpg.static_ips ))
+
+  global-pgbouncer:
+    debug: "true"
+    admin_user: "rdpgpbadmin"
+    admin_pass: "admin"
+
+  rdpgd-global-pgbouncer:
+    frequency: "15"
+
+  acceptance_tests:
+    # api: (( param "Define the acceptance_tests api endpoint. Ex: https://api.bosh-lite.com " )) # not used yet
+    # apps_domain: (( param "Define the acceptance_tests apps_domain. Ex: 10.244.0.34.xip.io " )) # not used yet
+    # admin_user:    admin # Not used yet
+    # admin_password:  admin # Not used yet
+    consul_ip: (( concat jobs.rdpgmc.networks.rdpg.static_ips.[0] ":8500" ))
+    broker_url_base:  (( concat jobs.rdpgmc.networks.rdpg.static_ips.[0] ":8888" ))
+    broker_admin_user: cfadmin
+    broker_admin_password: cfadmin
+    service_name:  rdpg
+    plans:
+      - plan_name: acceptance_tests_plan
+        max_storage_mb: 512
+        max_user_connections: 10
+
+    skip_ssl_validation: true
+    timeout_scale: 0.05
+      
+  backup_tests:
+    cf:
+      admin_username: internal_api_user
+      admin_password: (( vault meta.vault_prefix "/creds/cc:internal_api" ))
+    rdpg:
+      service_name: postgres
+      plan_names: '["shared","shared-nr"]'
+      restore_plan_names: '["shared-nr"]'
+      api_port: 58888
+      api_username: rdpg
+      api_password: admin
+    preferences:
+      test_queue_backup: true
+      worker_wait_period: 10
+      backup_wait_period: 5
+
+  broker_registrar:
+    cf:
+      admin_username: internal_api_user
+      admin_password: (( vault meta.vault_prefix "/creds/cc:internal_api" ))
+    broker:
+      name: rdpg-sb
+##      host:  (( concat jobs.top-level-haproxy.networks.rdpg.static_ips.[0] ":8888" ))  #Moved up into warden.yml so it can be pointed to MC or top-level-haproxy
+      port: 8888
+      admin_username: internal_api_user
+      admin_password: (( vault meta.vault_prefix "/creds/cc:internal_api" ))
+    rdpg:
+      broker:
+        enable_service_access: true
+        service_name: postgres
+
+  broker_deregistrar:
+    cf:
+      admin_username: internal_api_user
+      admin_password: (( vault meta.vault_prefix "/creds/cc:internal_api" ))
+    broker:
+      name: rdpg-sb
+    rdpg:
+      broker:
+        service_name: postgres
+
+compilation:
+  workers: 2
+  network: rdpg
+  reuse_compilation_vms: true
+
+update:
+  canaries: 0
+  max_in_flight: 1
+  canary_watch_time: 3000-350000
+  update_watch_time: 3000-350000
+  serial: false
+
+resource_pools:
+  - name: rdpg
+    network: rdpg
+    stemcell: (( grab meta.stemcell ))
+
+  - name: errand_a
+    network: rdpg
+    stemcell: (( grab meta.stemcell ))
+

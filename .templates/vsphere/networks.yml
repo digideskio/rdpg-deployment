@@ -1,0 +1,16 @@
+---
+networks:
+- name: openvpn_z1
+  type: manual
+  subnets: (( param "Specify your openvpn subnet" ))
+- name: openvpn_z2
+  type: manual
+  subnets: (( param "Specify your openvpn subnet" ))
+
+jobs:
+- name: openvpn_z1
+  networks:
+  - name: openvpn_z1
+- name: openvpn_z2
+  networks:
+  - name: openvpn_z2

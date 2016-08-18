@@ -1,0 +1,14 @@
+---
+resource_pools:
+  - name: small
+    network: rdpg
+    stemcell: (( grab meta.stemcell ))
+
+    cloud_properties: {}
+
+compilation:
+  network: rdpg
+  workers: 6
+  reuse_compilation_vms: true
+  cloud_properties: {}
+
